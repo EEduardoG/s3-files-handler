@@ -84,11 +84,12 @@ export default class S3Provider {
 
     }
 
-    async getFiles(bucket: string): Promise<IGetFiles[]> {
+    async getFiles(bucket: string, prefix: string = ""): Promise<IGetFiles[]> {
 
         try {
             const listObjectsParams: ListObjectsCommandInput = {
                 Bucket: bucket,
+                Prefix: prefix
             };
 
             const listObjectsResponse: any = await this.setClient().send(new ListObjectsCommand(listObjectsParams));
@@ -103,7 +104,10 @@ export default class S3Provider {
                     };
                     const getObjectResponse: any = await this.setClient().send(new GetObjectCommand(getObjectParams));
                     const bodyContents = await this.streamToString(getObjectResponse.Body);
-                    files.push({ key: content.Key, body: bodyContents });
+
+                    if (bodyContents !== "") {
+                        files.push({ key: content.Key, body: bodyContents });
+                    }
                 }
             }
 
