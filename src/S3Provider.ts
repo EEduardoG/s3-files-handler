@@ -19,8 +19,9 @@ export default class S3Provider {
 
     }
 
-    setClient(): S3Client {
+    setClient(region:string= ""): S3Client {
         dotenv.config()
+
         const {
             AWS_ACCESS_KEY_ID,
             AWS_SECRET_ACCESS_KEY,
@@ -28,6 +29,10 @@ export default class S3Provider {
             AWS_REGION
         } = process.env
 
+        if(region == ""){
+            console.log("Region is not defined. Using by default us-east-1");
+            region = "us-east-1";
+        }
 
         const s3Client =
             AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY ?
@@ -40,7 +45,7 @@ export default class S3Provider {
 
                     },
                 }) : new S3Client({
-                    region: AWS_REGION
+                    region: region
                 })
 
         return s3Client
