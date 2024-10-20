@@ -1,4 +1,4 @@
-import { GetObjectCommand, ListObjectsCommand, ListObjectsCommandInput, ListObjectsV2Command, ListObjectsV2CommandOutput, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { GetObjectCommand, ListObjectsCommand, ListObjectsCommandInput, ListObjectsCommandOutput, ListObjectsV2Command, ListObjectsV2CommandOutput, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import * as dotenv from 'dotenv'
 import { IFile } from './interfaces/IFile'
@@ -89,6 +89,35 @@ export default class S3Provider {
 
     }
 
+
+
+    setConcurrencyLimit(limit:number,items:any[]){
+        const concurrencyLimit = limit;
+        const chunckedItems = Array.from({ length: Math.ceil(items.length / concurrencyLimit) }, (_, index) =>
+            items.slice(index * concurrencyLimit, (index + 1) * concurrencyLimit)
+        );
+        return chunckedItems
+    }
+
+    async process(content:any,bucket:string,files:IGetFiles[]){
+        if (content.Key) {
+            const getObjectParams = {
+                Bucket: bucket,
+                Key: content.Key,
+            };
+            const getObjectResponse = await this.setClient().send(new GetObjectCommand(getObjectParams));
+            const bodyContents = await this.streamToString(getObjectResponse.Body);
+            if (bodyContents !== "") {
+                files.push({ key: content.Key, body: bodyContents });
+            }
+        } 
+    }
+
+    async  processAccountsConcurrently(items:any,bucket:string,files:IGetFiles[]) {
+        const promises = items.map((x:any) => this.process(x || [],bucket,files));
+        await Promise.all(promises);
+    }
+
     async getFiles(bucket: string, prefix: string = ""): Promise<IGetFiles[]> {
 
         try {
@@ -101,21 +130,11 @@ export default class S3Provider {
 
             let files: IGetFiles[] = [];
 
-            for (const content of listObjectsResponse.Contents || []) {
-                if (content.Key) {
-                    const getObjectParams = {
-                        Bucket: bucket,
-                        Key: content.Key,
-                    };
-                    const getObjectResponse: any = await this.setClient().send(new GetObjectCommand(getObjectParams));
-                    const bodyContents = await this.streamToString(getObjectResponse.Body);
-
-                    if (bodyContents !== "") {
-                        files.push({ key: content.Key, body: bodyContents });
-                    }
-                }
+            let chunckedItems = this.setConcurrencyLimit(25,listObjectsResponse.Contents)
+            for(const chunckedItem of chunckedItems){
+                await this.processAccountsConcurrently(chunckedItem,bucket,files)
             }
-
+            
             return files
         } catch (error) {
             console.log(error)
